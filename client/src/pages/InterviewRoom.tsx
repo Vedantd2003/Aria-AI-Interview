@@ -10,8 +10,10 @@ import { Timer } from '../components/interview/Timer';
 import { useVapi } from '../hooks/useVapi';
 import { useInterviewStore } from '../store/interview.store';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyRecord = Record<string, any>;
+interface LocationState {
+  vapiAssistantId?: string;
+  assistantOverrides?: Record<string, unknown>;
+}
 
 export default function InterviewRoom() {
   const { id } = useParams<{ id: string }>();
@@ -23,32 +25,26 @@ export default function InterviewRoom() {
   const store = useInterviewStore();
   const { startCall, endCall, toggleMute } = useVapi(id!);
 
-  const assistantConfig = (location.state as { assistantConfig?: AnyRecord })?.assistantConfig;
+  const state = (location.state as LocationState) ?? {};
+  const { vapiAssistantId, assistantOverrides } = state;
 
   useEffect(() => {
-    if (!assistantConfig) {
-      toast.error('Interview session not found. Redirecting...');
+    if (!vapiAssistantId) {
+      toast.error('Interview session not found. Please set up a new interview.');
       navigate('/interview/setup');
       return;
     }
 
     store.setInterviewId(id!);
 
-    startCall(assistantConfig)
-      .catch(() => toast.error('Failed to connect. Check your microphone permissions.'))
+    startCall(vapiAssistantId, assistantOverrides ?? {})
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Failed to connect';
+        toast.error(`${msg}. Check microphone permissions.`);
+      })
       .finally(() => setStarting(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Tick timer
-  useEffect(() => {
-    if (!store.isCallActive) return;
-    const interval = setInterval(() => {
-      store.setElapsedSeconds(store.elapsedSeconds + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.isCallActive, store.elapsedSeconds]);
 
   if (starting) {
     return (
@@ -58,6 +54,7 @@ export default function InterviewRoom() {
       >
         <Loader2 size={32} className="animate-spin text-[#8B5CF6]" />
         <p className="text-[#9A9AA8] text-sm">Connecting to ARIA...</p>
+        <p className="text-[#9A9AA8] text-xs opacity-60">Allow microphone access when prompted</p>
       </div>
     );
   }
@@ -69,12 +66,11 @@ export default function InterviewRoom() {
     >
       {/* Background glow */}
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 pointer-events-none transition-all duration-500"
         style={{
           background: store.isSpeaking
-            ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(34,211,238,0.06) 0%, transparent 70%)'
-            : 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(139,92,246,0.06) 0%, transparent 70%)',
-          transition: 'background 0.5s ease',
+            ? 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(34,211,238,0.07) 0%, transparent 70%)'
+            : 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(139,92,246,0.07) 0%, transparent 70%)',
         }}
       />
 
@@ -93,7 +89,7 @@ export default function InterviewRoom() {
           }}
         >
           <div
-            className="w-2 h-2 rounded-full"
+            className="w-2 h-2 rounded-full animate-pulse"
             style={{
               background: store.isSpeaking ? '#22D3EE' : store.isCallActive ? '#10B981' : '#9A9AA8',
               boxShadow: store.isSpeaking ? '0 0 8px #22D3EE' : store.isCallActive ? '0 0 8px #10B981' : 'none',

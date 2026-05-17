@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { Interview } from '../models/Interview';
 import { User } from '../models/User';
-import { buildAssistantConfig } from '../services/vapi.service';
+import { buildAssistantOverrides } from '../services/vapi.service';
 import { ApiError } from '../utils/ApiError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { env } from '../config/env';
@@ -28,15 +28,12 @@ export const createInterview = asyncHandler(async (req: Request, res: Response) 
     status: 'pending',
   });
 
-  const serverUrl = `${env.NODE_ENV === 'production' ? 'https' : 'http'}://${req.get('host')}/api/webhooks/vapi`;
-
-  const assistantConfig = buildAssistantConfig({
+  const assistantOverrides = buildAssistantOverrides({
     userName: user.name,
     role,
     difficulty,
     duration,
     resumeText: user.resumeText,
-    serverUrl,
   });
 
   res.status(201).json({
@@ -48,7 +45,9 @@ export const createInterview = asyncHandler(async (req: Request, res: Response) 
       duration,
       status: interview.status,
     },
-    assistantConfig,
+    // Send the assistant ID (not private key) + safe overrides to client
+    vapiAssistantId: env.VAPI_ASSISTANT_ID,
+    assistantOverrides,
     vapiPublicKey: env.VAPI_PUBLIC_KEY,
   });
 });

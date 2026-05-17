@@ -8,6 +8,7 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   VAPI_PRIVATE_KEY: z.string().default(''),
   VAPI_PUBLIC_KEY: z.string().default(''),
+  VAPI_ASSISTANT_ID: z.string().default(''),
   OPENROUTER_KEY: z.string().default(''),
   CLIENT_URL: z.string().default('http://localhost:5173'),
   GOOGLE_CLIENT_ID: z.string().default(''),

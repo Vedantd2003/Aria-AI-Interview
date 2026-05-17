@@ -13,22 +13,23 @@ export function useVapi(interviewId: string) {
   const store = useInterviewStore();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vapiRef = useRef(getVapi());
+  const endedRef = useRef(false);
 
   const startCall = useCallback(
-    async (assistantConfig: AnyRecord) => {
+    async (vapiAssistantId: string, assistantOverrides: AnyRecord) => {
       const vapi = vapiRef.current;
+      endedRef.current = false;
 
       vapi.on('call-start', () => {
         store.setIsCallActive(true);
         store.setStatus('in_progress');
         timerRef.current = setInterval(() => {
-          store.setElapsedSeconds(store.elapsedSeconds + 1);
+          useInterviewStore.setState((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
         }, 1000);
       });
 
       vapi.on('speech-start', () => store.setIsSpeaking(true));
       vapi.on('speech-end', () => store.setIsSpeaking(false));
-
       vapi.on('volume-level', (v: number) => store.setVolumeLevel(v));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,38 +41,44 @@ export function useVapi(interviewId: string) {
             ts: new Date().toISOString(),
           });
         }
-        if (msg?.type === 'call-update' && msg.call?.id) {
+        if (msg?.call?.id && !store.vapiCallId) {
           store.setVapiCallId(msg.call.id);
         }
       });
 
       vapi.on('call-end', async () => {
+        if (endedRef.current) return;
+        endedRef.current = true;
         if (timerRef.current) clearInterval(timerRef.current);
         store.setIsCallActive(false);
-        store.setStatus('completed');
+        store.setIsSpeaking(false);
 
         try {
+          const currentTranscript = useInterviewStore.getState().transcript;
+          const currentCallId = useInterviewStore.getState().vapiCallId;
           await api.post(`/interviews/${interviewId}/end`, {
-            transcript: store.transcript,
-            vapiCallId: store.vapiCallId,
+            transcript: currentTranscript,
+            vapiCallId: currentCallId,
           });
           await api.post(`/feedback/${interviewId}`);
-          navigate(`/feedback/${interviewId}`);
         } catch {
-          toast.error('Failed to save interview. Redirecting anyway.');
-          navigate(`/feedback/${interviewId}`);
+          // Best-effort — still navigate to feedback
         }
+        navigate(`/feedback/${interviewId}`);
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vapi.on('error', (err: any) => {
         console.error('Vapi error:', err);
-        toast.error('Voice connection error. Please try again.');
+        const msg = err?.error?.message || err?.message || 'Voice connection error';
+        toast.error(msg);
       });
 
-      await vapi.start(assistantConfig);
+      // Start using the pre-built assistant ID with dynamic overrides
+      await vapi.start(vapiAssistantId, assistantOverrides);
     },
-    [interviewId, navigate, store]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [interviewId, navigate]
   );
 
   const endCall = useCallback(() => {
@@ -88,7 +95,7 @@ export function useVapi(interviewId: string) {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      vapiRef.current.stop();
+      if (!endedRef.current) vapiRef.current.stop();
     };
   }, []);
 
