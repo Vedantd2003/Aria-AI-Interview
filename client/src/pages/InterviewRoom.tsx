@@ -11,8 +11,7 @@ import { useVapi } from '../hooks/useVapi';
 import { useInterviewStore } from '../store/interview.store';
 
 interface LocationState {
-  vapiAssistantId?: string;
-  assistantOverrides?: Record<string, unknown>;
+  vapiConfig?: Record<string, unknown>;
 }
 
 export default function InterviewRoom() {
@@ -21,15 +20,15 @@ export default function InterviewRoom() {
   const navigate = useNavigate();
   const [showTranscript, setShowTranscript] = useState(false);
   const [starting, setStarting] = useState(true);
+  const [callError, setCallError] = useState<string | null>(null);
 
   const store = useInterviewStore();
   const { startCall, endCall, toggleMute } = useVapi(id!);
 
-  const state = (location.state as LocationState) ?? {};
-  const { vapiAssistantId, assistantOverrides } = state;
+  const vapiConfig = (location.state as LocationState)?.vapiConfig;
 
   useEffect(() => {
-    if (!vapiAssistantId) {
+    if (!vapiConfig) {
       toast.error('Interview session not found. Please set up a new interview.');
       navigate('/interview/setup');
       return;
@@ -37,10 +36,16 @@ export default function InterviewRoom() {
 
     store.setInterviewId(id!);
 
-    startCall(vapiAssistantId, assistantOverrides ?? {})
+    startCall(vapiConfig)
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Failed to connect';
-        toast.error(`${msg}. Check microphone permissions.`);
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null
+              ? (err as Record<string, unknown>).message?.toString() ?? 'Failed to connect'
+              : 'Failed to connect';
+        setCallError(msg);
+        toast.error(`Connection failed: ${msg}`);
       })
       .finally(() => setStarting(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,6 +60,30 @@ export default function InterviewRoom() {
         <Loader2 size={32} className="animate-spin text-[#8B5CF6]" />
         <p className="text-[#9A9AA8] text-sm">Connecting to ARIA...</p>
         <p className="text-[#9A9AA8] text-xs opacity-60">Allow microphone access when prompted</p>
+      </div>
+    );
+  }
+
+  if (callError) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-6 px-6"
+        style={{ background: '#07070B' }}
+      >
+        <div className="text-center max-w-sm">
+          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-400 text-xl">!</span>
+          </div>
+          <h2 className="text-[#F5F5F7] font-semibold mb-2">Connection failed</h2>
+          <p className="text-[#9A9AA8] text-sm mb-6">{callError}</p>
+          <button
+            onClick={() => navigate('/interview/setup')}
+            className="px-6 py-2.5 rounded-xl text-sm font-medium text-white"
+            style={{ background: 'linear-gradient(135deg, #8B5CF6, #22D3EE)' }}
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }

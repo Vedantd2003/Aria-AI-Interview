@@ -53,19 +53,14 @@ export default function InterviewSetup() {
     try {
       const { data } = await api.post<{
         interview: { id: string };
-        vapiAssistantId: string;
-        assistantOverrides: Record<string, unknown>;
-        vapiPublicKey: string;
+        vapiConfig: Record<string, unknown>;
       }>('/interviews', { role, difficulty, duration });
 
       store.reset();
       store.setInterviewId(data.interview.id);
 
       navigate(`/interview/${data.interview.id}`, {
-        state: {
-          vapiAssistantId: data.vapiAssistantId,
-          assistantOverrides: data.assistantOverrides,
-        },
+        state: { vapiConfig: data.vapiConfig },
       });
     } catch {
       toast.error('Failed to create interview. Please try again.');

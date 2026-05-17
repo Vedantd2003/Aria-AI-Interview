@@ -8,76 +8,90 @@ import { useInterviewStore } from '../store/interview.store';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
 
+// Always return a renderable string regardless of what Vapi throws
+function extractErrorMessage(err: unknown): string {
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object') {
+    const o = err as AnyRecord;
+    // Vapi error shape: { type, error: { message, statusCode }, ... }
+    if (typeof o.error?.message === 'string') return o.error.message;
+    if (typeof o.message === 'string') return o.message;
+    if (typeof o.error === 'string') return o.error;
+  }
+  return 'Voice connection error';
+}
+
 export function useVapi(interviewId: string) {
   const navigate = useNavigate();
-  const store = useInterviewStore();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vapiRef = useRef(getVapi());
   const endedRef = useRef(false);
+  const listenersRef = useRef(false);
 
   const startCall = useCallback(
-    async (vapiAssistantId: string, assistantOverrides: AnyRecord) => {
+    async (vapiConfig: AnyRecord) => {
       const vapi = vapiRef.current;
       endedRef.current = false;
 
-      vapi.on('call-start', () => {
-        store.setIsCallActive(true);
-        store.setStatus('in_progress');
-        timerRef.current = setInterval(() => {
-          useInterviewStore.setState((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
-        }, 1000);
-      });
+      // Attach listeners only once per hook instance
+      if (!listenersRef.current) {
+        listenersRef.current = true;
 
-      vapi.on('speech-start', () => store.setIsSpeaking(true));
-      vapi.on('speech-end', () => store.setIsSpeaking(false));
-      vapi.on('volume-level', (v: number) => store.setVolumeLevel(v));
+        vapi.on('call-start', () => {
+          useInterviewStore.getState().setIsCallActive(true);
+          useInterviewStore.getState().setStatus('in_progress');
+          timerRef.current = setInterval(() => {
+            useInterviewStore.setState((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
+          }, 1000);
+        });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vapi.on('message', (msg: any) => {
-        if (msg?.type === 'transcript' && msg.transcriptType === 'final') {
-          store.appendTranscript({
-            role: msg.role === 'assistant' ? 'assistant' : 'user',
-            text: msg.transcript,
-            ts: new Date().toISOString(),
-          });
-        }
-        if (msg?.call?.id && !store.vapiCallId) {
-          store.setVapiCallId(msg.call.id);
-        }
-      });
+        vapi.on('speech-start', () => useInterviewStore.getState().setIsSpeaking(true));
+        vapi.on('speech-end', () => useInterviewStore.getState().setIsSpeaking(false));
+        vapi.on('volume-level', (v: number) => useInterviewStore.getState().setVolumeLevel(v));
 
-      vapi.on('call-end', async () => {
-        if (endedRef.current) return;
-        endedRef.current = true;
-        if (timerRef.current) clearInterval(timerRef.current);
-        store.setIsCallActive(false);
-        store.setIsSpeaking(false);
+        vapi.on('message', (msg: AnyRecord) => {
+          if (msg?.type === 'transcript' && msg.transcriptType === 'final') {
+            useInterviewStore.getState().appendTranscript({
+              role: msg.role === 'assistant' ? 'assistant' : 'user',
+              text: msg.transcript,
+              ts: new Date().toISOString(),
+            });
+          }
+          if (msg?.call?.id && !useInterviewStore.getState().vapiCallId) {
+            useInterviewStore.getState().setVapiCallId(msg.call.id);
+          }
+        });
 
-        try {
-          const currentTranscript = useInterviewStore.getState().transcript;
-          const currentCallId = useInterviewStore.getState().vapiCallId;
-          await api.post(`/interviews/${interviewId}/end`, {
-            transcript: currentTranscript,
-            vapiCallId: currentCallId,
-          });
-          await api.post(`/feedback/${interviewId}`);
-        } catch {
-          // Best-effort — still navigate to feedback
-        }
-        navigate(`/feedback/${interviewId}`);
-      });
+        vapi.on('call-end', async () => {
+          if (endedRef.current) return;
+          endedRef.current = true;
+          if (timerRef.current) clearInterval(timerRef.current);
+          useInterviewStore.getState().setIsCallActive(false);
+          useInterviewStore.getState().setIsSpeaking(false);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vapi.on('error', (err: any) => {
-        console.error('Vapi error:', err);
-        const msg = err?.error?.message || err?.message || 'Voice connection error';
-        toast.error(msg);
-      });
+          try {
+            const { transcript, vapiCallId } = useInterviewStore.getState();
+            await api.post(`/interviews/${interviewId}/end`, { transcript, vapiCallId });
+            await api.post(`/feedback/${interviewId}`);
+          } catch {
+            // best-effort save; navigate regardless
+          }
+          navigate(`/feedback/${interviewId}`);
+        });
 
-      // Start using the pre-built assistant ID with dynamic overrides
-      await vapi.start(vapiAssistantId, assistantOverrides);
+        vapi.on('error', (err: unknown) => {
+          console.error('Vapi error:', err);
+          // extractErrorMessage ensures we always pass a string — never an
+          // object — to toast, which would otherwise trigger React error #31
+          toast.error(extractErrorMessage(err));
+        });
+      }
+
+      // Pass the full inline config — Vapi creates a transient assistant
+      // for this specific web call, no dashboard assistant ID required
+      await vapi.start(vapiConfig as Parameters<typeof vapi.start>[0]);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [interviewId, navigate]
   );
 

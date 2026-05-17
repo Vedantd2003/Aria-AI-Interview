@@ -2,10 +2,9 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { Interview } from '../models/Interview';
 import { User } from '../models/User';
-import { buildAssistantOverrides } from '../services/vapi.service';
+import { buildClientVapiConfig } from '../services/vapi.service';
 import { ApiError } from '../utils/ApiError';
 import { asyncHandler } from '../utils/asyncHandler';
-import { env } from '../config/env';
 
 const createSchema = z.object({
   role: z.enum(['Frontend', 'Backend', 'Full-Stack', 'System Design', 'Behavioral', 'DSA']),
@@ -28,7 +27,9 @@ export const createInterview = asyncHandler(async (req: Request, res: Response) 
     status: 'pending',
   });
 
-  const assistantOverrides = buildAssistantOverrides({
+  // Build a complete inline Vapi config — no assistant ID, no secrets.
+  // vapi.start(config) creates a transient assistant for this one call.
+  const vapiConfig = buildClientVapiConfig({
     userName: user.name,
     role,
     difficulty,
@@ -45,10 +46,7 @@ export const createInterview = asyncHandler(async (req: Request, res: Response) 
       duration,
       status: interview.status,
     },
-    // Send the assistant ID (not private key) + safe overrides to client
-    vapiAssistantId: env.VAPI_ASSISTANT_ID,
-    assistantOverrides,
-    vapiPublicKey: env.VAPI_PUBLIC_KEY,
+    vapiConfig,
   });
 });
 
