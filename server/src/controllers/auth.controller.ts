@@ -28,10 +28,14 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+// In production the client and server are on different *.onrender.com subdomains,
+// which are treated as cross-site. sameSite:'none' + secure:true is required for
+// the refresh cookie to be sent on cross-origin requests.
+const IS_PROD = env.NODE_ENV === 'production';
 const COOKIE_OPTS = {
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  secure: IS_PROD,
+  sameSite: (IS_PROD ? 'none' : 'lax') as 'none' | 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/',
 };
@@ -41,7 +45,12 @@ function setRefreshCookie(res: Response, token: string) {
 }
 
 function clearRefreshCookie(res: Response) {
-  res.clearCookie('refreshToken', { path: '/' });
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: IS_PROD ? 'none' : 'lax',
+    path: '/',
+  });
 }
 
 async function issueTokens(

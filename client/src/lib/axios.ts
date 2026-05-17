@@ -65,8 +65,9 @@ api.interceptors.response.use(
         return api(original);
       } catch (refreshError) {
         processQueue(refreshError, null);
+        // Clear auth state — ProtectedRoute will handle the soft redirect
+        // via React Router <Navigate>, avoiding a hard page reload loop.
         useAuthStore.getState().clearAuth();
-        window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
