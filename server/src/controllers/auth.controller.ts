@@ -160,7 +160,11 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     req.headers['user-agent'] ?? ''
   );
 
-  res.json({ success: true, accessToken });
+  res.json({ 
+    success: true, 
+    accessToken,
+    user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar }
+  });
 });
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {

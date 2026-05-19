@@ -27,6 +27,19 @@ async function fetchCurrentUser(retries = 2): Promise<User | null> {
   }
 }
 
+async function refreshAccessToken(): Promise<{ user: User; accessToken: string } | null> {
+  try {
+    const { data } = await axios.post<{ success: boolean; accessToken: string; user: User }>(
+      `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/refresh`,
+      {},
+      { withCredentials: true }
+    );
+    return { user: data.user, accessToken: data.accessToken };
+  } catch {
+    return null;
+  }
+}
+
 export function Providers({ children }: ProvidersProps) {
   const { setAuth, clearAuth, setLoading } = useAuthStore();
   const didInit = useRef(false);
@@ -36,12 +49,27 @@ export function Providers({ children }: ProvidersProps) {
     if (didInit.current) return;
     didInit.current = true;
 
-    fetchCurrentUser()
-      .then((user) => {
-        if (user) {
-          setAuth(user, useAuthStore.getState().accessToken ?? '');
+    // On page load, try to refresh the token first using the refresh cookie
+    // This handles the case where the access token is lost on page refresh
+    refreshAccessToken()
+      .then((result) => {
+        if (result) {
+          setAuth(result.user, result.accessToken);
         } else {
-          clearAuth();
+          // If refresh fails, try to fetch current user (might have valid access token in memory)
+          return fetchCurrentUser();
+        }
+      })
+      .then((user) => {
+        if (user && typeof user !== 'boolean') {
+          // If we got here from refreshAccessToken failure, user might be null
+          // Only set auth if we have a valid user and access token
+          const currentToken = useAuthStore.getState().accessToken;
+          if (currentToken) {
+            setAuth(user, currentToken);
+          } else {
+            clearAuth();
+          }
         }
       })
       .catch(() => {
