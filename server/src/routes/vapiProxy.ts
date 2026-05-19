@@ -1,17 +1,30 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { env } from '../config/env';
-import { requireAuth } from '../middleware/auth.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
-// Proxy Vapi API calls through our server using the private key.
+// The Vapi SDK automatically sends: Authorization: Bearer <VAPI_PUBLIC_KEY>
+// Validate that token matches our known public key so random callers can't
+// use our proxy to burn our Vapi credits.
+function validateVapiPublicKey(req: Request, res: Response, next: NextFunction): void {
+  const auth = req.headers.authorization ?? '';
+  const expected = `Bearer ${env.VAPI_PUBLIC_KEY}`;
+  if (auth !== expected) {
+    res.status(401).json({ success: false, message: 'Unauthorized', code: 'UNAUTHORIZED' });
+    return;
+  }
+  next();
+}
+
+// Proxy all Vapi API calls through our server using the private key.
 // This permanently bypasses Vapi's "allowed origins" restriction:
-//   browser  →  our server (CORS OK)  →  api.vapi.ai (server-to-server, no origin check)
-// Daily.co WebRTC still connects directly browser → daily.co (no Vapi API involved).
+//   browser  →  our server (CORS already configured)
+//   server   →  api.vapi.ai (server-to-server with private key, no origin check)
+// Daily.co WebRTC audio still connects directly browser → daily.co.
 router.all(
   '*',
-  requireAuth,
+  validateVapiPublicKey,
   asyncHandler(async (req: Request, res: Response) => {
     const vapiUrl = `https://api.vapi.ai${req.path}`;
     const method = req.method.toUpperCase();
