@@ -8,18 +8,20 @@ import { useInterviewStore } from '../store/interview.store';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
 
-// Always return a renderable string regardless of what Vapi throws
+// Always return a plain string — never pass an object to toast (React error #31)
 function extractErrorMessage(err: unknown): string {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
   if (err && typeof err === 'object') {
     const o = err as AnyRecord;
-    // Vapi error shape: { type, error: { message, statusCode }, ... }
+    const statusCode = o.error?.statusCode ?? o.statusCode;
+    if (statusCode === 403) return 'Voice call blocked (403). The proxy may need a moment — please try again.';
+    if (statusCode === 401) return 'Invalid Vapi API key. Check VITE_VAPI_PUBLIC_KEY.';
     if (typeof o.error?.message === 'string') return o.error.message;
     if (typeof o.message === 'string') return o.message;
     if (typeof o.error === 'string') return o.error;
   }
-  return 'Voice connection error';
+  return 'Voice connection error. Please try again.';
 }
 
 export function useVapi(interviewId: string) {
@@ -81,9 +83,8 @@ export function useVapi(interviewId: string) {
         });
 
         vapi.on('error', (err: unknown) => {
-          console.error('Vapi error:', err);
-          // extractErrorMessage ensures we always pass a string — never an
-          // object — to toast, which would otherwise trigger React error #31
+          // Log full details for debugging — never just "Object"
+          try { console.error('Vapi error:', JSON.stringify(err, null, 2)); } catch { console.error('Vapi error:', err); }
           toast.error(extractErrorMessage(err));
         });
       }

@@ -16,6 +16,7 @@ import interviewRoutes from './routes/interview';
 import feedbackRoutes from './routes/feedback';
 import userRoutes from './routes/user';
 import webhookRoutes from './routes/webhook';
+import vapiProxyRoutes from './routes/vapiProxy';
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/interviews', interviewRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/vapi-proxy', vapiProxyRoutes);
 
 app.use(errorHandler);
 
