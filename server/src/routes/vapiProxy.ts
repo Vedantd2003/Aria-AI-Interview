@@ -17,11 +17,18 @@ function validateVapiPublicKey(req: Request, res: Response, next: NextFunction):
   next();
 }
 
-// Proxy all Vapi API calls through our server using the private key.
-// This permanently bypasses Vapi's "allowed origins" restriction:
-//   browser  →  our server (CORS already configured)
-//   server   →  api.vapi.ai (server-to-server with private key, no origin check)
-// Daily.co WebRTC audio still connects directly browser → daily.co.
+// Proxy all Vapi API calls through our server using the PUBLIC key.
+//
+// Key insight: Vapi's /call/web always requires the PUBLIC key — the
+// "allowed origins" check is a separate enforcement that only applies
+// when the request has an Origin header (i.e. from a browser).
+// Server-to-server requests have no Origin header, so Vapi skips the
+// origin check, and the public key authenticates the request correctly.
+//
+//   browser  →  our server (CORS configured)
+//   server   →  api.vapi.ai/call/web  Authorization: Bearer <PUBLIC_KEY>
+//                                      (no Origin header → no origin check)
+//   Daily.co WebRTC still goes browser → daily.co directly.
 router.all(
   '*',
   validateVapiPublicKey,
@@ -33,7 +40,9 @@ router.all(
     const vapiRes = await fetch(vapiUrl, {
       method,
       headers: {
-        Authorization: `Bearer ${env.VAPI_PRIVATE_KEY}`,
+        // Use PUBLIC key — /call/web requires it; origin check doesn't
+        // apply server-side because there is no Origin request header.
+        Authorization: `Bearer ${env.VAPI_PUBLIC_KEY}`,
         'Content-Type': 'application/json',
       },
       body: hasBody ? JSON.stringify(req.body) : undefined,
