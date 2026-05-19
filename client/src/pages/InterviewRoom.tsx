@@ -11,7 +11,8 @@ import { useVapi } from '../hooks/useVapi';
 import { useInterviewStore } from '../store/interview.store';
 
 interface LocationState {
-  vapiConfig?: Record<string, unknown>;
+  vapiAssistantId?: string;
+  assistantOverrides?: Record<string, unknown>;
 }
 
 export default function InterviewRoom() {
@@ -25,10 +26,10 @@ export default function InterviewRoom() {
   const store = useInterviewStore();
   const { startCall, endCall, toggleMute } = useVapi(id!);
 
-  const vapiConfig = (location.state as LocationState)?.vapiConfig;
+  const { vapiAssistantId, assistantOverrides } = (location.state as LocationState) ?? {};
 
   useEffect(() => {
-    if (!vapiConfig) {
+    if (!vapiAssistantId) {
       toast.error('Interview session not found. Please set up a new interview.');
       navigate('/interview/setup');
       return;
@@ -36,7 +37,7 @@ export default function InterviewRoom() {
 
     store.setInterviewId(id!);
 
-    startCall(vapiConfig)
+    startCall(vapiAssistantId, assistantOverrides ?? {})
       .catch((err: unknown) => {
         const msg =
           err instanceof Error

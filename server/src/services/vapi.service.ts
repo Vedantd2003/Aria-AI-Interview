@@ -1,4 +1,5 @@
 import { InterviewDifficulty, InterviewRole } from '../models/Interview';
+import { env } from '../config/env';
 
 const ROLE_TOPICS: Record<InterviewRole, string> = {
   Frontend:
@@ -14,32 +15,24 @@ const ROLE_TOPICS: Record<InterviewRole, string> = {
   DSA: 'arrays, strings, trees, graphs, dynamic programming, sorting, searching, time/space complexity analysis',
 };
 
-export interface VapiClientConfig {
-  firstMessage: string;
-  model: {
-    provider: string;
-    model: string;
-    messages: Array<{ role: string; content: string }>;
+export interface AssistantStartPayload {
+  assistantId: string;
+  assistantOverrides: {
+    firstMessage: string;
+    model: {
+      messages: Array<{ role: string; content: string }>;
+    };
+    maxDurationSeconds: number;
   };
-  voice: {
-    provider: string;
-    voiceId: string;
-  };
-  transcriber: {
-    provider: string;
-    model: string;
-    language: string;
-  };
-  maxDurationSeconds: number;
 }
 
-export function buildClientVapiConfig(params: {
+export function buildAssistantStartPayload(params: {
   userName: string;
   role: InterviewRole;
   difficulty: InterviewDifficulty;
   duration: number;
   resumeText?: string;
-}): VapiClientConfig {
+}): AssistantStartPayload {
   const { userName, role, difficulty, duration, resumeText } = params;
 
   const resumeContext = resumeText
@@ -61,22 +54,14 @@ Guidelines:
 - Keep spoken responses concise — this is a voice interview.`;
 
   return {
-    firstMessage: `Hi ${userName}! I'm ARIA, your AI interviewer. We're doing a ${difficulty} ${role} interview for about ${duration} minutes. Take your time with each answer — ready to begin?`,
-    model: {
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'system', content: systemPrompt }],
+    // Use the pre-configured assistant — avoids "transient assistant" restriction
+    assistantId: env.VAPI_ASSISTANT_ID,
+    assistantOverrides: {
+      firstMessage: `Hi ${userName}! I'm ARIA, your AI interviewer. We're doing a ${difficulty} ${role} interview for about ${duration} minutes. Take your time with each answer — ready to begin?`,
+      model: {
+        messages: [{ role: 'system', content: systemPrompt }],
+      },
+      maxDurationSeconds: duration * 60 + 120,
     },
-    // OpenAI TTS: no separate ElevenLabs account needed in Vapi
-    voice: {
-      provider: 'openai',
-      voiceId: 'shimmer', // warm, professional female voice
-    },
-    transcriber: {
-      provider: 'deepgram',
-      model: 'nova-2',
-      language: 'en',
-    },
-    maxDurationSeconds: duration * 60 + 120,
   };
 }

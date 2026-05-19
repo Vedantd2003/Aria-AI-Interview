@@ -32,7 +32,7 @@ export function useVapi(interviewId: string) {
   const listenersRef = useRef(false);
 
   const startCall = useCallback(
-    async (vapiConfig: AnyRecord) => {
+    async (assistantId: string, overrides: AnyRecord) => {
       const vapi = vapiRef.current;
       endedRef.current = false;
 
@@ -89,9 +89,10 @@ export function useVapi(interviewId: string) {
         });
       }
 
-      // Pass the full inline config — Vapi creates a transient assistant
-      // for this specific web call, no dashboard assistant ID required
-      await vapi.start(vapiConfig as Parameters<typeof vapi.start>[0]);
+      // Use the pre-configured assistant ID with dynamic overrides.
+      // The key doesn't allow transient (inline) assistants, but it does
+      // allow overriding a named assistant's firstMessage + system prompt.
+      await vapi.start(assistantId, overrides as Parameters<typeof vapi.start>[1]);
     },
     [interviewId, navigate]
   );

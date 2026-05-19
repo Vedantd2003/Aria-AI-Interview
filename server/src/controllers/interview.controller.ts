@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { Interview } from '../models/Interview';
 import { User } from '../models/User';
-import { buildClientVapiConfig } from '../services/vapi.service';
+import { buildAssistantStartPayload } from '../services/vapi.service';
 import { ApiError } from '../utils/ApiError';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -27,9 +27,9 @@ export const createInterview = asyncHandler(async (req: Request, res: Response) 
     status: 'pending',
   });
 
-  // Build a complete inline Vapi config — no assistant ID, no secrets.
-  // vapi.start(config) creates a transient assistant for this one call.
-  const vapiConfig = buildClientVapiConfig({
+  // Use the pre-configured Vapi assistant ID with dynamic overrides.
+  // Avoids "transient assistant" 403 — the key only allows named assistants.
+  const vapiPayload = buildAssistantStartPayload({
     userName: user.name,
     role,
     difficulty,
@@ -46,7 +46,8 @@ export const createInterview = asyncHandler(async (req: Request, res: Response) 
       duration,
       status: interview.status,
     },
-    vapiConfig,
+    vapiAssistantId: vapiPayload.assistantId,
+    assistantOverrides: vapiPayload.assistantOverrides,
   });
 });
 
