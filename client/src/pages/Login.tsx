@@ -9,7 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import axios from 'axios';
 
 const schema = z.object({
-  email: z.string().email('Invalid email'),
+  email: z.string().email('Invalid email').transform((s) => s.toLowerCase().trim()),
   password: z.string().min(1, 'Password required'),
 });
 

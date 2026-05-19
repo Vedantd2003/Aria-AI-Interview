@@ -9,8 +9,8 @@ import { useAuth } from '../hooks/useAuth';
 import axios from 'axios';
 
 const schema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email'),
+  name: z.string().min(2, 'Name must be at least 2 characters').trim(),
+  email: z.string().email('Invalid email').transform((s) => s.toLowerCase().trim()),
   password: z
     .string()
     .min(8, 'At least 8 characters')

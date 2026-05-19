@@ -14,17 +14,18 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { env } from '../config/env';
 
 const registerSchema = z.object({
-  name: z.string().min(2).max(60),
-  email: z.string().email(),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(60).trim(),
+  // normalize email before any DB lookup so case never causes a false miss
+  email: z.string().email('Invalid email address').transform((s) => s.toLowerCase().trim()),
   password: z
     .string()
-    .min(8)
-    .regex(/[a-zA-Z]/, 'Must contain a letter')
-    .regex(/[0-9]/, 'Must contain a number'),
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[a-zA-Z]/, 'Must contain at least one letter')
+    .regex(/[0-9]/, 'Must contain at least one number'),
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform((s) => s.toLowerCase().trim()),
   password: z.string().min(1),
 });
 
@@ -81,7 +82,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   const { name, email, password } = registerSchema.parse(req.body);
 
   const existing = await User.findOne({ email });
-  if (existing) throw ApiError.badRequest('Invalid credentials');
+  if (existing) throw new ApiError(409, 'An account with this email already exists', 'EMAIL_TAKEN');
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ name, email, passwordHash });
